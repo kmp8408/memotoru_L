@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>メモ取るくんLight v1.0.0</title>
+  <style>
+    body { font-family: sans-serif; margin: 12px; background: #f8f9fa; color: #333; }
+    .header { text-align: center; margin-bottom: 8px; }
+    h2 { font-size: 1.15rem; margin: 0; display: inline-flex; align-items: center; gap: 6px; }
+    .version-tag { font-size: 0.7rem; background: #6c757d; color: #fff; padding: 2px 6px; border-radius: 10px; font-weight: normal; }
+    .sub-desc { text-align: center; font-size: 0.75rem; color: #777; margin-top: 4px; margin-bottom: 12px; }
+    
+    /* 入力・編集フォーム */
+    .form-box { background: #fff; padding: 12px; border-radius: 8px; border: 1px solid #ddd; margin-bottom: 12px; transition: border-color 0.2s; }
+    .form-box.editing { border: 2px solid #ffc107; background: #fffdf5; }
+    .input-row { display: flex; gap: 8px; margin-bottom: 8px; }
+    input, select, textarea, button { padding: 8px; font-size: 0.95rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+    input[type="text"] { flex: 3; }
+    select { flex: 1; }
+    textarea.memo-content { width: 100%; height: 80px; resize: vertical; margin-bottom: 8px; font-family: inherit; }
+    .btn-row { display: flex; gap: 8px; }
+    button.add-btn { flex: 1; background: #007bff; color: #fff; border: none; font-weight: bold; cursor: pointer; padding: 10px; border-radius: 4px; }
+    button.cancel-btn { background: #6c757d; color: #fff; border: none; font-weight: bold; cursor: pointer; padding: 10px 16px; border-radius: 4px; display: none; }
+    
+    /* 並び替えエリア */
+    .sort-box { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding: 0 4px; }
+    .sort-label { font-size: 0.85rem; font-weight: bold; color: #555; }
+    .sort-select { padding: 4px 8px; font-size: 0.85rem; border-radius: 4px; border: 1px solid #ccc; background: #fff; }
+
+    /* メモ一覧 */
+    .list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; }
+    .item-card { background: #fff; border-left: 6px solid #ccc; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; }
+    .item-color-blue { border-left-color: #007bff; }
+    .item-color-red { border-left-color: #dc3545; }
+    .item-color-green { border-left-color: #28a745; }
+    .item-color-orange { border-left-color: #fd7e14; }
+    .item-color-purple { border-left-color: #6f42c1; }
+
+    /* タイトル行（タップで展開） */
+    .item-header { display: flex; align-items: center; padding: 10px; cursor: pointer; user-select: none; gap: 6px; }
+    .item-main { flex: 1; overflow: hidden; }
+    .item-title { font-weight: bold; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .item-date { font-size: 0.7rem; color: #888; margin-top: 2px; }
+    
+    .toggle-icon { font-size: 0.8rem; color: #888; transition: transform 0.2s; margin-right: 4px; }
+    .item-card.open .toggle-icon { transform: rotate(90deg); }
+
+    .icon-btn { background: none; border: none; cursor: pointer; padding: 4px; line-height: 1; font-size: 1rem; opacity: 0.6; transition: opacity 0.2s; }
+    .icon-btn:hover { opacity: 1; }
+    .del-btn { color: #dc3545; font-size: 1.2rem; }
+
+    /* 開閉する本文エリア */
+    .item-body { display: none; padding: 10px; border-top: 1px dashed #eee; background: #fafafa; font-size: 0.9rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+    .item-card.open .item-body { display: block; }
+
+    /* CSV管理エリア */
+    .backup-box { background: #eee; padding: 12px; border-radius: 8px; font-size: 0.85rem; border: 1px solid #ccc; }
+    .backup-box summary { font-weight: bold; cursor: pointer; color: #444; }
+    .backup-content { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+    .csv-actions { display: flex; gap: 8px; }
+    .csv-actions button, .csv-actions label {
+      flex: 1; background: #28a745; color: #fff; border: none; padding: 8px 12px; font-size: 0.85rem;
+      border-radius: 4px; cursor: pointer; text-align: center; box-sizing: border-box; font-weight: bold;
+    }
+    .csv-actions label { background: #17a2b8; display: inline-block; }
+    #csvFileInput { display: none; }
+    .csv-note { font-size: 0.75rem; color: #666; line-height: 1.4; margin: 0; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h2>📝 メモ取るくん <span class="version-tag">Light v1.0.0</span></h2>
+    <div class="sub-desc">🔒 データはお使いの端末内（ブラウザ）に安全に保存されます</div>
+  </div>
+
+  <!-- 入力・編集フォーム -->
+  <div class="form-box" id="formBox">
+    <input type="hidden" id="editId" value="">
+    <div class="input-row">
+      <input type="text" id="title" placeholder="メモのタイトル">
+      <select id="color">
+        <option value="blue">青</option>
+        <option value="red">赤</option>
+        <option value="green">緑</option>
+        <option value="orange">橙</option>
+        <option value="purple">紫</option>
+      </select>
+    </div>
+    <textarea id="content" class="memo-content" placeholder="メモの本文を入力..."></textarea>
+    <div class="btn-row">
+      <button class="add-btn" id="submitBtn" onclick="saveItem()">追加する</button>
+      <button class="cancel-btn" id="cancelBtn" onclick="cancelEdit()">キャンセル</button>
+    </div>
+  </div>
+
+  <!-- ソート選択エリア（初期値：更新日時 新しい順） -->
+  <div class="sort-box">
+    <span class="sort-label">並び替え</span>
+    <select id="sortType" class="sort-select" onchange="render()">
+      <option value="date-desc" selected>更新日時 (新しい順)</option>
+      <option value="date-asc">更新日時 (古い順)</option>
+      <option value="title-asc">タイトル順 (あ-ん)</option>
+      <option value="color-asc">カラー順 (青/赤/緑/橙/紫)</option>
+    </select>
+  </div>
+
+  <!-- メモ一覧 -->
+  <div class="list" id="itemList"></div>
+
+  <!-- CSV入出力エリア -->
+  <details class="backup-box">
+    <summary>📊 Excel / CSV 入出力（データ保存・移行）</summary>
+    <div class="backup-content">
+      <div class="csv-actions">
+        <button onclick="exportCSV()">📥 CSVダウンロード</button>
+        <label for="csvFileInput">📤 CSV読み込み</label>
+        <input type="file" id="csvFileInput" accept=".csv, text/csv, text/plain, application/vnd.ms-excel, text/comma-separated-values" onchange="importCSV(event)">
+      </div>
+      <p class="csv-note">
+        ※改行入りのメモもそのままExcelやCSVで書き出し・読み込みが可能です。<br>
+        ※列構成：<code>id, title, content, color, updatedAt</code>（ヘッダー行含む）
+      </p>
+    </div>
+  </details>
+
+  <script>
+    const STORAGE_KEY = 'memotorukun_light_events';
+    let memos = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+    let openedMemoIds = new Set(); // 開閉状態を記憶するセット
+
+    function generateId() {
+      return 'memo_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    }
+
+    function formatDate(isoStr) {
+      if (!isoStr) return '';
+      const d = new Date(isoStr);
+      if (isNaN(d.getTime())) return isoStr;
+      const y = d.getFullYear();
+      const m = ('0' + (d.getMonth() + 1)).slice(-2);
+      const day = ('0' + d.getDate()).slice(-2);
+      const h = ('0' + d.getHours()).slice(-2);
+      const min = ('0' + d.getMinutes()).slice(-2);
+      return `${y}/${m}/${day} ${h}:${min}`;
+    }
+
+    function saveToLocalStorage() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(memos));
+    }
+
+    // アコーディオン開閉
+    function toggleBody(id) {
+      if (openedMemoIds.has(id)) {
+        openedMemoIds.delete(id);
+      } else {
+        openedMemoIds.add(id);
+      }
+      render();
+    }
+
+    function render() {
+      const listEl = document.getElementById('itemList');
+      listEl.innerHTML = '';
+
+      let displayMemos = [...memos];
+      const sortType = document.getElementById('sortType').value;
+      const colorOrder = { 'blue': 1, 'red': 2, 'green': 3, 'orange': 4, 'purple': 5 };
+
+      if (sortType === 'date-desc') {
+        displayMemos.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+      } else if (sortType === 'date-asc') {
+        displayMemos.sort((a, b) => new Date(a.updatedAt || 0) - new Date(b.updatedAt || 0));
+      } else if (sortType === 'title-asc') {
+        displayMemos.sort((a, b) => a.title.localeCompare(b.title, 'ja'));
+      } else if (sortType === 'color-asc') {
+        displayMemos.sort((a, b) => (colorOrder[a.color] || 99) - (colorOrder[b.color] || 99));
+      }
+
+      displayMemos.forEach((item) => {
+        const isOpen = openedMemoIds.has(item.id);
+        const card = document.createElement('div');
+        card.className = `item-card item-color-${item.color || 'blue'} ${isOpen ? 'open' : ''}`;
+
+        card.innerHTML = `
+          <div class="item-header" onclick="toggleBody('${item.id}')">
+            <span class="toggle-icon">▶</span>
+            <div class="item-main">
+              <div class="item-title">${escapeHtml(item.title)}</div>
+              <div class="item-date">最終更新: ${formatDate(item.updatedAt)}</div>
+            </div>
+            <button class="icon-btn edit-btn" title="編集" onclick="event.stopPropagation(); startEdit('${item.id}')">✏️</button>
+            <button class="icon-btn del-btn" title="削除" onclick="event.stopPropagation(); delItem('${item.id}')">×</button>
+          </div>
+          <div class="item-body">${escapeHtml(item.content || '(本文なし)')}</div>
+        `;
+        listEl.appendChild(card);
+      });
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function saveItem() {
+      const editId = document.getElementById('editId').value;
+      const title = document.getElementById('title').value.trim();
+      const content = document.getElementById('content').value;
+      const color = document.getElementById('color').value;
+
+      if (!title) {
+        alert('タイトルを入力してください');
+        return;
+      }
+
+      const now = new Date().toISOString();
+
+      if (editId) {
+        const target = memos.find(m => m.id === editId);
+        if (target) {
+          target.title = title;
+          target.content = content;
+          target.color = color;
+          target.updatedAt = now;
+        }
+      } else {
+        const id = generateId();
+        memos.push({ id, title, content, color, updatedAt: now });
+        openedMemoIds.add(id); // 新規追加したメモは開いた状態にする
+      }
+
+      saveToLocalStorage();
+      cancelEdit();
+      render();
+    }
+
+    function startEdit(id) {
+      const target = memos.find(m => m.id === id);
+      if (!target) return;
+
+      document.getElementById('editId').value = target.id;
+      document.getElementById('title').value = target.title;
+      document.getElementById('content').value = target.content || '';
+      document.getElementById('color').value = target.color || 'blue';
+
+      document.getElementById('submitBtn').innerText = '更新する';
+      document.getElementById('submitBtn').style.background = '#28a745';
+      document.getElementById('cancelBtn').style.display = 'block';
+      document.getElementById('formBox').classList.add('editing');
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function cancelEdit() {
+      document.getElementById('editId').value = '';
+      document.getElementById('title').value = '';
+      document.getElementById('content').value = '';
+      document.getElementById('color').value = 'blue';
+
+      document.getElementById('submitBtn').innerText = '追加する';
+      document.getElementById('submitBtn').style.background = '#007bff';
+      document.getElementById('cancelBtn').style.display = 'none';
+      document.getElementById('formBox').classList.remove('editing');
+    }
+
+    function delItem(id) {
+      if (confirm('このメモを削除しますか？')) {
+        memos = memos.filter(m => m.id !== id);
+        openedMemoIds.delete(id);
+        saveToLocalStorage();
+        if (document.getElementById('editId').value === id) {
+          cancelEdit();
+        }
+        render();
+      }
+    }
+
+    /* CSVエクスポート（改行・ダブルクォート完全エスケープ） */
+    function exportCSV() {
+      if (memos.length === 0) {
+        alert('エクスポートするデータがありません');
+        return;
+      }
+
+      const headers = ['id', 'title', 'content', 'color', 'updatedAt'];
+      const rows = [headers.join(',')];
+
+      memos.forEach(m => {
+        const safeId = `"${(m.id || '').replace(/"/g, '""')}"`;
+        const safeTitle = `"${(m.title || '').replace(/"/g, '""')}"`;
+        const safeContent = `"${(m.content || '').replace(/"/g, '""')}"`;
+        const safeColor = `"${(m.color || 'blue').replace(/"/g, '""')}"`;
+        const safeDate = `"${(m.updatedAt || '').replace(/"/g, '""')}"`;
+        rows.push([safeId, safeTitle, safeContent, safeColor, safeDate].join(','));
+      });
+
+      const blob = new Blob(['\uFEFF' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `memotorukun_light_${new Date().toISOString().slice(0,10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    /* CSVインポート（複数行にまたがるセルを正しく読み込むRFC4180準拠パーサー） */
+    function parseCSV(text) {
+      const p = [];
+      let row = [''];
+      let inQuotes = false;
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        const next = text[i + 1];
+        if (c === '"') {
+          if (inQuotes && next === '"') {
+            row[row.length - 1] += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (c === ',' && !inQuotes) {
+          row.push('');
+        } else if ((c === '\r' || c === '\n') && !inQuotes) {
+          if (c === '\r' && next === '\n') i++;
+          p.push(row);
+          row = [''];
+        } else {
+          row[row.length - 1] += c;
+        }
+      }
+      if (row.length > 1 || row[0] !== '') p.push(row);
+      return p;
+    }
+
+    function importCSV(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const text = e.target.result;
+        const rows = parseCSV(text);
+
+        if (rows.length <= 1) {
+          alert('CSVファイルに有効なデータが含まれていません');
+          return;
+        }
+
+        const newMemos = [];
+        for (let i = 1; i < rows.length; i++) {
+          const cols = rows[i];
+          if (cols.length >= 2) {
+            const rawId = cols[0] ? cols[0].trim() : '';
+            const title = cols[1] || '無題のメモ';
+            const content = cols[2] || '';
+            const color = cols[3] || 'blue';
+            const updatedAt = cols[4] || new Date().toISOString();
+
+            newMemos.push({
+              id: rawId !== '' ? rawId : generateId(),
+              title: title,
+              content: content,
+              color: color,
+              updatedAt: updatedAt
+            });
+          }
+        }
+
+        if (confirm(`現在のデータに上書きして ${newMemos.length} 件のメモを取り込みますか？`)) {
+          memos = newMemos;
+          openedMemoIds.clear();
+          saveToLocalStorage();
+          render();
+          alert('CSVのインポートが完了しました！');
+        }
+        event.target.value = '';
+      };
+      reader.readAsText(file);
+    }
+
+    render();
+  </script>
+</body>
+</html>
